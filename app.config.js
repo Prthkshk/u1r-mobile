@@ -40,15 +40,7 @@ export default ({ config }) => {
       package: "com.prthkshk.u1rmobile"
     },
 
-    plugins: [
-      [
-        "@react-native-voice/voice",
-        {
-          microphonePermission:
-            "Allow U1R to access microphone for voice search."
-        }
-      ]
-    ],
+    // 🚨 REMOVED old voice plugin completely
 
     extra: {
       apiBaseUrl: isProduction
