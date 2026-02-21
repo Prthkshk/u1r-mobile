@@ -1,7 +1,7 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import AppNavigation from "./src/navigation/AppNavigation";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { TiltWarp_400Regular } from "@expo-google-fonts/tilt-warp";
@@ -25,9 +25,11 @@ export default function App() {
         <UserProvider>
           <CartProvider>
             <WishlistProvider>
-              <NavigationContainer>
-                <AppNavigation />
-              </NavigationContainer>
+              <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+                <NavigationContainer>
+                  <AppNavigation />
+                </NavigationContainer>
+              </SafeAreaView>
             </WishlistProvider>
           </CartProvider>
         </UserProvider>

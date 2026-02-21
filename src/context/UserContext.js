@@ -3,29 +3,46 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const UserContext = createContext();
 
+const normalizeMode = (value = "") => {
+  const upper = value.toUpperCase();
+  if (upper === "B2B" || upper === "WHOLESALE") return "wholesale";
+  if (upper === "B2C" || upper === "RETAIL") return "retail";
+  return "";
+};
+
 export function UserProvider({ children }) {
   const [phone, setPhone] = useState("");
   const [userId, setUserId] = useState("");
-  const [mode, setMode] = useState("");
+  const [mode, setMode] = useState(null);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem("userPhone")
-      .then((savedPhone) => {
+    const hydrate = async () => {
+      try {
+        const [savedPhone, savedId, savedMode] = await Promise.all([
+          AsyncStorage.getItem("userPhone"),
+          AsyncStorage.getItem("userId"),
+          AsyncStorage.getItem("userMode"),
+        ]);
+        console.log("[UserContext] AsyncStorage userMode:", savedMode);
         if (savedPhone) setPhone(savedPhone);
-      })
-      .catch(() => {});
-
-    AsyncStorage.getItem("userId")
-      .then((savedId) => {
         if (savedId) setUserId(savedId);
-      })
-      .catch(() => {});
+        if (savedMode) {
+          const nextMode = normalizeMode(savedMode);
+          setMode(nextMode);
+          console.log("[UserContext] mode set from storage:", nextMode);
+        } else {
+          setMode("retail");
+          console.log("[UserContext] mode defaulted to retail");
+        }
+      } catch {
+        // ignore hydration errors for now
+      } finally {
+        setIsHydrated(true);
+      }
+    };
 
-    AsyncStorage.getItem("userMode")
-      .then((savedMode) => {
-        if (savedMode) setMode(savedMode);
-      })
-      .catch(() => {});
+    hydrate();
   }, []);
 
   const setPhonePersist = async (value) => {
@@ -55,10 +72,12 @@ export function UserProvider({ children }) {
   };
 
   const setModePersist = async (value) => {
-    setMode(value);
+    const normalized = normalizeMode(value);
+    setMode(normalized);
+    console.log("[UserContext] mode set in context:", normalized);
     try {
-      if (value) {
-        await AsyncStorage.setItem("userMode", value);
+      if (normalized) {
+        await AsyncStorage.setItem("userMode", normalized);
       } else {
         await AsyncStorage.removeItem("userMode");
       }
@@ -67,12 +86,15 @@ export function UserProvider({ children }) {
     }
   };
 
-  const setUserPersist = async ({ phone: nextPhone = "", userId: nextId = "", mode: nextMode = "" }) => {
+  const setUserPersist = async ({ phone: nextPhone, userId: nextId, mode: nextMode }) => {
     await Promise.all([
-      setPhonePersist(nextPhone),
-      setUserIdPersist(nextId),
-      setModePersist(nextMode),
+      nextPhone !== undefined ? setPhonePersist(nextPhone) : Promise.resolve(),
+      nextId !== undefined ? setUserIdPersist(nextId) : Promise.resolve(),
+      nextMode !== undefined ? setModePersist(nextMode) : Promise.resolve(),
     ]);
+  };
+  const selectMode = async (nextMode) => {
+    await setModePersist(nextMode);
   };
 
   const value = useMemo(
@@ -80,12 +102,14 @@ export function UserProvider({ children }) {
       phone,
       userId,
       mode,
+      isHydrated,
       setPhone: setPhonePersist,
       setUserId: setUserIdPersist,
       setMode: setModePersist,
+      selectMode,
       setUser: setUserPersist,
     }),
-    [phone, userId, mode]
+    [phone, userId, mode, isHydrated]
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

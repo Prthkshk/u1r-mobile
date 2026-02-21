@@ -8,13 +8,15 @@ import {
   ScrollView,
 } from "react-native";
 import { Fonts } from "../styles/typography";
-import { selectMode } from "../../services/userService";
+import { selectMode as selectModeApi } from "../../services/userService";
 import { useUser } from "../../context/UserContext";
 import { checkStatus } from "../../services/wholesaleService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import RetailIcon from "../../assets/icons/retail.svg";
 
 export default function ShoppingModeScreen({ navigation, route }) {
-  const phone = route?.params?.phone;
-  const { userId, setUser } = useUser();
+  const { userId, setUser, phone: storedPhone, selectMode } = useUser();
+  const phone = route?.params?.phone || storedPhone;
   const [loading, setLoading] = useState(false);
   const [b2bComplete, setB2bComplete] = useState(false);
 
@@ -27,32 +29,157 @@ export default function ShoppingModeScreen({ navigation, route }) {
       .catch(() => {});
   }, [userId]);
 
-  const handleMode = async (mode) => {
-    if (!userId) {
+  const resolvePhone = async () => {
+    if (phone) return phone;
+    try {
+      const cached = await AsyncStorage.getItem("userPhone");
+      return cached || "";
+    } catch {
+      return "";
+    }
+  };
+
+  const isValidObjectId = (value = "") => /^[a-fA-F0-9]{24}$/.test(String(value));
+
+  const updateModeOnServer = async (modeCode, safePhone) => {
+    const canUseUserId = isValidObjectId(userId);
+
+    if (canUseUserId) {
+      try {
+        return await selectModeApi({ userId, mode: modeCode, phone: safePhone });
+      } catch (err) {
+        // Retry by phone when stored userId is stale/invalid after app restart.
+        const status = err?.response?.status;
+        const message = String(err?.response?.data?.message || "").toLowerCase();
+        const shouldRetryWithPhone =
+          !!safePhone &&
+          (status === 400 ||
+            status === 404 ||
+            status === 500 ||
+            message.includes("required") ||
+            message.includes("not found") ||
+            message.includes("invalid") ||
+            message.includes("cast"));
+
+        if (!shouldRetryWithPhone) throw err;
+      }
+    }
+
+    return selectModeApi({ mode: modeCode, phone: safePhone });
+  };
+
+  const handleWholesale = async () => {
+    const safePhone = await resolvePhone();
+    if (!safePhone) {
       alert("Please login again.");
       navigation.reset({ index: 0, routes: [{ name: "Login" }] });
       return;
     }
-    try {
-      setLoading(true);
-      await selectMode({ userId, mode });
-      await setUser({ phone, userId, mode });
-      if (mode === "B2B") {
-        if (b2bComplete) {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "HomeTabs" }],
-          });
-        } else {
-          navigation.navigate("RegisterStep1", { phone });
+    const normalized = "wholesale";
+    console.log("[ShoppingMode] selecting mode:", normalized);
+    const proceed = async (nextUserId, statusCompletedOverride) => {
+      const payload = { phone: safePhone };
+      if (nextUserId) payload.userId = nextUserId;
+      await setUser(payload);
+      await selectMode(normalized);
+      let isB2bComplete = statusCompletedOverride ?? b2bComplete;
+      if (!isB2bComplete && nextUserId) {
+        try {
+          const statusRes = await checkStatus(nextUserId);
+          isB2bComplete = !!statusRes?.data?.completed;
+        } catch {
+          // keep fallback value
         }
-      } else {
+      }
+      if (isB2bComplete) {
         navigation.reset({
           index: 0,
           routes: [{ name: "HomeTabs" }],
         });
+      } else {
+        navigation.navigate("RegisterStep1", { phone: safePhone });
       }
+    };
+    try {
+      setLoading(true);
+      const canCheckNow = isValidObjectId(userId);
+      const statusPromise = canCheckNow
+        ? checkStatus(userId).catch(() => null)
+        : Promise.resolve(null);
+      const modePromise = updateModeOnServer("B2B", safePhone);
+
+      const [statusRes, modeRes] = await Promise.all([statusPromise, modePromise]);
+      const nextUserId = modeRes?.data?.user?._id || userId || "";
+      const statusCompleted = !!statusRes?.data?.completed;
+      await proceed(nextUserId, statusCompleted);
     } catch (err) {
+      const message = err?.response?.data?.message || err?.message;
+      if (message === "userId and mode are required" || message === "userId or phone is required") {
+        await proceed(userId);
+        return;
+      }
+      if (message === "User not found" || err?.response?.status === 404) {
+        // Some backends return 404 for mode sync even when local session is valid.
+        if (safePhone) {
+          await proceed(userId || "");
+          return;
+        }
+        await setUser({ phone: "", userId: "", mode: "" });
+        alert("Session expired. Please login again.");
+        navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+        return;
+      }
+      console.log("Select mode error", err?.response?.data || err?.message);
+      alert("Could not update mode. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRetail = async () => {
+    const safePhone = await resolvePhone();
+    if (!safePhone) {
+      alert("Please login again.");
+      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+      return;
+    }
+    const normalized = "retail";
+    console.log("[ShoppingMode] selecting mode:", normalized);
+    const proceed = async (nextUserId) => {
+      const payload = { phone: safePhone };
+      if (nextUserId) payload.userId = nextUserId;
+      await setUser(payload);
+      await selectMode(normalized);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "HomeTabs" }],
+      });
+    };
+    try {
+      setLoading(true);
+      await proceed(userId || "");
+      updateModeOnServer("B2C", safePhone)
+        .then(async (res) => {
+          const nextUserId = res?.data?.user?._id;
+          if (nextUserId && nextUserId !== userId) {
+            await setUser({ userId: nextUserId });
+          }
+        })
+        .catch((err) => {
+          console.log("Retail mode sync warning", err?.response?.data || err?.message);
+        });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message;
+      if (message === "userId and mode are required" || message === "userId or phone is required") {
+        await proceed(userId);
+        return;
+      }
+      if (message === "User not found" || err?.response?.status === 404) {
+        await setUser({ phone: "", userId: "", mode: "" });
+        alert("Session expired. Please login again.");
+        navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+        return;
+      }
       console.log("Select mode error", err?.response?.data || err?.message);
       alert("Could not update mode. Please try again.");
     } finally {
@@ -62,21 +189,17 @@ export default function ShoppingModeScreen({ navigation, route }) {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-
-      {/* Heading */}
       <Text style={[Fonts.heading, styles.heading]}>
         Choose Your Shopping Mode
       </Text>
 
       <Text style={[Fonts.body, styles.subHeading]}>
-        Select how you’d like to shop: buy in bulk for your business or choose
-        everyday items for personal use.
+        Select how you’d like to shop: buy in bulk for your business or choose everyday items for personal use.
       </Text>
 
-      {/* WHOLESALE CARD */}
       <TouchableOpacity
-        style={[styles.card, styles.wholesaleCard]}
-        onPress={() => handleMode("B2B")}
+        style={[styles.card, styles.wholesaleCard, loading && styles.cardDisabled]}
+        onPress={handleWholesale}
         disabled={loading}
       >
         <View style={styles.leftSection}>
@@ -91,7 +214,7 @@ export default function ShoppingModeScreen({ navigation, route }) {
               Wholesale for Business
             </Text>
             <Text style={[Fonts.body, styles.wholesaleText]}>
-              Buy large quantities at lower prices, just for businesses
+              Buy large quantities at lower prices, just for business
             </Text>
           </View>
         </View>
@@ -102,25 +225,20 @@ export default function ShoppingModeScreen({ navigation, route }) {
         />
       </TouchableOpacity>
 
-      {/* RETAIL CARD */}
       <TouchableOpacity
-        style={[styles.card, styles.retailCard]}
-        onPress={() => handleMode("B2C")}
+        style={[styles.card, styles.retailCard, loading && styles.cardDisabled]}
+        onPress={handleRetail}
         disabled={loading}
       >
         <View style={styles.leftSection}>
-          <Image
-            source={require("../../assets/icons/retail.png")}
-            style={styles.retailIcon}
-            resizeMode="contain"
-          />
+          <RetailIcon width={45} height={45} fill="#FFFFFF" />
 
           <View style={{ flexShrink: 1 }}>
             <Text style={[Fonts.bodyExtraBold, styles.retailTitle]}>
               Shop Retail Items
             </Text>
             <Text style={[Fonts.body, styles.retailText]}>
-              Shop everyday items for your home and personal use
+              Shop everyday items for your home and personal use one at a time
             </Text>
           </View>
         </View>
@@ -130,7 +248,6 @@ export default function ShoppingModeScreen({ navigation, route }) {
           style={styles.retailArrow}
         />
       </TouchableOpacity>
-
     </ScrollView>
   );
 }
@@ -138,34 +255,33 @@ export default function ShoppingModeScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-    padding: 20,
+    backgroundColor: "#fff",
+    padding: 22,
   },
 
   heading: {
     fontSize: 26,
-    marginTop: 15,
+    marginTop: 10,
     color: "#000",
   },
 
   subHeading: {
     fontSize: 14,
-    color: "#555",
-    marginTop: 6,
-    marginBottom: 25,
+    color: "#747474",
+    marginTop: 10,
+    marginBottom: 22,
     lineHeight: 20,
   },
 
   card: {
     width: "100%",
-    height: 140,
+    minHeight: 140,
     borderRadius: 20,
     padding: 18,
     marginBottom: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-
   },
 
   leftSection: {
@@ -175,17 +291,54 @@ const styles = StyleSheet.create({
     width: "80%",
   },
 
-  /* WHOLESALE */
-  wholesaleCard: {
-    backgroundColor: "#F7C600",
+  cardDisabled: {
+    opacity: 0.6,
+  },
+
+  retailCard: {
+    backgroundColor: "#F52F2F",
     borderWidth: 3,
-    borderColor: "#D4A500",
+    borderColor: "#B80000",
+    shadowColor: "#F52F2F",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+
+  retailTitle: {
+    fontSize: 18,
+    color: "#fff",
+  },
+
+  retailText: {
+    fontSize: 13,
+    color: "#fff",
+    marginTop: 3,
+    lineHeight: 18,
+  },
+
+  retailArrow: {
+    width: 28,
+    height: 28,
+    tintColor: "#fff",
+  },
+
+  wholesaleCard: {
+    backgroundColor: "#FFD43B",
+    borderWidth: 2,
+    borderColor: "#D7A900",
+    shadowColor: "#FFD43B",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
 
   wholesaleIcon: {
     width: 45,
     height: 45,
-    tintColor: "#A88400",
+    tintColor: "#B89A00",
   },
 
   wholesaleTitle: {
@@ -204,36 +357,5 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     tintColor: "#000",
-  },
-
-  /* RETAIL */
-  retailCard: {
-    backgroundColor: "#FF2E2E",
-    borderWidth: 3,
-    borderColor: "#CC0000",
-  },
-
-  retailIcon: {
-    width: 45,
-    height: 45,
-    tintColor: "#FFF",
-  },
-
-  retailTitle: {
-    fontSize: 18,
-    color: "#FFF",
-  },
-
-  retailText: {
-    fontSize: 13,
-    color: "#FFF",
-    marginTop: 3,
-    lineHeight: 18,
-  },
-
-  retailArrow: {
-    width: 28,
-    height: 28,
-    tintColor: "#FFF",
   },
 });

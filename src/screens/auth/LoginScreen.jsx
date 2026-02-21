@@ -10,6 +10,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Fonts } from "../styles/typography";
@@ -18,11 +19,18 @@ import { useUser } from "../../context/UserContext";
 
 export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const { setPhone: setUserPhone } = useUser();
+
+  const handlePhoneChange = (value) => {
+    const digitsOnly = value.replace(/\D/g, "");
+    setPhone(digitsOnly);
+    if (phoneError) setPhoneError("");
+  };
 
   const handleContinue = async () => {
     if (phone.length !== 10) {
-      alert("Enter a valid 10-digit mobile number");
+      setPhoneError("Enter valid number");
       return;
     }
 
@@ -39,61 +47,77 @@ export default function LoginScreen({ navigation }) {
   const openLink = (url) => Linking.openURL(url).catch(() => {});
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }} edges={["bottom"]}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
 
-      {/* TOP BANNER IMAGE */}
-      <ImageBackground
-        source={require("../../assets/images/login-food.png")}
-        style={styles.hero}
-        imageStyle={styles.heroImage}
-      />
-
-      {/* BOTTOM WHITE SHEET */}
+      {/* WRAP EVERYTHING */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.sheet}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 50 : 0}
       >
-        <Text style={[Fonts.heading, styles.sheetTitle]}>
-          Sign Up or Login
-        </Text>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* TOP IMAGE */}
+          <ImageBackground
+            source={require("../../assets/images/login-food.png")}
+            style={styles.hero}
+            imageStyle={styles.heroImage}
+          />
 
-        <Text style={[Fonts.body, styles.sheetSubtitle]}>
-          Enter your mobile number to continue shopping
-        </Text>
+          {/* SHEET */}
+          <View style={styles.sheet}>
+            <Text style={[Fonts.heading, styles.sheetTitle]}>
+              Sign Up or Login
+            </Text>
 
-        {/* PHONE INPUT */}
-        <TextInput
-          style={[Fonts.body, styles.input]}
-          placeholder="Enter Phone Number"
-          keyboardType="phone-pad"
-          maxLength={10}
-          value={phone}
-          onChangeText={setPhone}
-        />
+            <Text style={[Fonts.body, styles.sheetSubtitle]}>
+              Enter your mobile number to continue shopping
+            </Text>
 
-        {/* OTP BUTTON */}
-        <TouchableOpacity style={styles.btn} onPress={handleContinue}>
-          <Text style={[Fonts.bodyBold, styles.btnText]}>Get OTP</Text>
-        </TouchableOpacity>
+            {/* PHONE INPUT */}
+            <TextInput
+              style={[
+                Fonts.body,
+                styles.input,
+                phoneError ? styles.inputError : null,
+                { color: "#111" },
+              ]}
+              placeholder="Enter Phone Number"
+              keyboardType="phone-pad"
+              maxLength={10}
+              value={phone}
+              onChangeText={handlePhoneChange}
+              placeholderTextColor="#777"
+            />
+            {!!phoneError && <Text style={styles.errorText}>{phoneError}</Text>}
 
-        {/* TERMS */}
-        <Text style={[Fonts.body, styles.termsText]}>
-          By Logging into this app, you agree to our{" "}
-          <Text
-            style={styles.link}
-            onPress={() => openLink("https://example.com/terms")}
-          >
-            Terms of Service
-          </Text>{" "}
-          and{" "}
-          <Text
-            style={styles.link}
-            onPress={() => openLink("https://example.com/privacy")}
-          >
-            Privacy Policy
-          </Text>
-        </Text>
+            {/* OTP BUTTON */}
+            <TouchableOpacity style={styles.btn} onPress={handleContinue}>
+              <Text style={[Fonts.bodyBold, styles.btnText]}>Get OTP</Text>
+            </TouchableOpacity>
+
+            {/* TERMS */}
+            <Text style={[Fonts.body, styles.termsText]}>
+              By Logging into this app, you agree to our{" "}
+              <Text
+                style={styles.link}
+                onPress={() => openLink("https://example.com/terms")}
+              >
+                Terms of Service
+              </Text>{" "}
+              and{" "}
+              <Text
+                style={styles.link}
+                onPress={() => openLink("https://example.com/privacy")}
+              >
+                Privacy Policy
+              </Text>
+            </Text>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -112,10 +136,6 @@ const styles = StyleSheet.create({
   },
 
   sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: "#f7f7f7",
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
@@ -124,6 +144,7 @@ const styles = StyleSheet.create({
     paddingBottom: 42,
     borderTopWidth: 1,
     borderColor: "#DCDCDC",
+    marginTop: -30,
   },
 
   sheetTitle: {
@@ -147,6 +168,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontSize: 15,
     color: "#111",
+  },
+  inputError: {
+    borderColor: "#FF2E2E",
+  },
+  errorText: {
+    color: "#FF2E2E",
+    fontSize: 12,
+    marginTop: -10,
+    marginBottom: 14,
+    marginLeft: 4,
   },
 
   btn: {

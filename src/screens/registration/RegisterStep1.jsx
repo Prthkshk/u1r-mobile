@@ -29,6 +29,12 @@ export default function RegisterStep1({ navigation, route }) {
     }
   };
 
+  const isValidEmail = (value) => {
+    const trimmed = (value || "").trim();
+    const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+    return emailRegex.test(trimmed);
+  };
+
   const handleNext = async () => {
     if (!userId) {
       alert("Please login again.");
@@ -37,6 +43,10 @@ export default function RegisterStep1({ navigation, route }) {
     }
     if (!firstName || !phone || !email) {
       alert("Please fill required fields");
+      return;
+    }
+    if (!isValidEmail(email)) {
+      alert("Please enter a valid email address.");
       return;
     }
 
@@ -71,6 +81,8 @@ export default function RegisterStep1({ navigation, route }) {
       alert("Failed to save step 1. Please try again.");
     }
   };
+
+  const placeholderColor = "#777";
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -108,24 +120,30 @@ export default function RegisterStep1({ navigation, route }) {
         <Text style={styles.sectionTitle}>Enter Owner Details</Text>
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, { color: "#111" }]}
           placeholder="First Name"
+          placeholderTextColor={placeholderColor}
           value={firstName}
           onChangeText={setFirstName}
         />
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, { color: "#111" }]}
           placeholder="Second Name"
+          placeholderTextColor={placeholderColor}
           value={secondName}
           onChangeText={setSecondName}
         />
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, { color: "#111" }]}
           placeholder="Email"
+          placeholderTextColor={placeholderColor}
           value={email}
           onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoComplete="email"
         />
 
         {/* Business Type */}
@@ -216,6 +234,7 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     paddingHorizontal: 14,
     marginBottom: 6,
+    color: "#111",
   },
 
   typeBox: {

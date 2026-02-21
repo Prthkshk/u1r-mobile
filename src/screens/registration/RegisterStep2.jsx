@@ -86,6 +86,8 @@ export default function RegisterStep2({ navigation, route }) {
     }
   };
 
+  const placeholderColor = "#777";
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <ScrollView
@@ -117,29 +119,33 @@ export default function RegisterStep2({ navigation, route }) {
 
         {/* INPUTS */}
         <TextInput
-          style={[styles.input, Fonts.body]}
+          style={[styles.input, Fonts.body, { color: "#111" }]}
           placeholder="Company Name"
+          placeholderTextColor={placeholderColor}
           value={companyName}
           onChangeText={setCompanyName}
         />
 
         <TextInput
-          style={[styles.input, Fonts.body]}
+          style={[styles.input, Fonts.body, { color: "#111" }]}
           placeholder="Outlet Name"
+          placeholderTextColor={placeholderColor}
           value={outletName}
           onChangeText={setOutletName}
         />
 
         <TextInput
-          style={[styles.input, Fonts.body]}
+          style={[styles.input, Fonts.body, { color: "#111" }]}
           placeholder="GST Number"
+          placeholderTextColor={placeholderColor}
           value={gstNumber}
           onChangeText={setGstNumber}
         />
 
         <TextInput
-          style={[styles.input, Fonts.body]}
+          style={[styles.input, Fonts.body, { color: "#111" }]}
           placeholder="Pin Code"
+          placeholderTextColor={placeholderColor}
           value={pincode}
           onChangeText={handlePincodeChange}
           keyboardType="numeric"
@@ -148,31 +154,35 @@ export default function RegisterStep2({ navigation, route }) {
         {pinLoading ? <Text style={[Fonts.body, { color: "#888", marginBottom: 6 }]}>Fetching area...</Text> : null}
 
         <TextInput
-          style={[styles.input, Fonts.body]}
+          style={[styles.input, Fonts.body, { color: "#111" }]}
           placeholder="Address"
+          placeholderTextColor={placeholderColor}
           value={address}
           onChangeText={setAddress}
         />
 
         <View style={styles.row}>
           <TextInput
-            style={[styles.input, styles.half, Fonts.body]}
+            style={[styles.input, styles.half, Fonts.body, { color: "#111" }]}
             placeholder="City"
+            placeholderTextColor={placeholderColor}
             value={city}
             onChangeText={setCity}
           />
 
           <TextInput
-            style={[styles.input, styles.half, Fonts.body]}
+            style={[styles.input, styles.half, Fonts.body, { color: "#111" }]}
             placeholder="State"
+            placeholderTextColor={placeholderColor}
             value={state}
             onChangeText={setState}
           />
         </View>
 
         <TextInput
-          style={[styles.input, Fonts.body]}
+          style={[styles.input, Fonts.body, { color: "#111" }]}
           placeholder="Landmark"
+          placeholderTextColor={placeholderColor}
           value={landmark}
           onChangeText={setLandmark}
         />
@@ -250,6 +260,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 8,
     fontSize: 15,
+    color: "#111",
   },
 
   row: {

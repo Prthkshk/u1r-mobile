@@ -9,16 +9,19 @@ import {
 } from "react-native";
 import { sendOtp, verifyOtp } from "../../services/authService";
 import { useUser } from "../../context/UserContext";
+import { API_BASE_URL } from "../../config/api";
 
 export default function OtpScreen({ navigation, route }) {
   const { phone } = route.params;
   const [otp, setOtp] = useState(["", "", "", ""]);
+  const [otpError, setOtpError] = useState("");
   const inputRefs = useRef([]);
   const { setUser } = useUser();
   const [timer, setTimer] = useState(60);
   const [resending, setResending] = useState(false);
 
   const handleChange = (val, index) => {
+    setOtpError("");
     const next = [...otp];
     next[index] = val;
     setOtp(next);
@@ -43,19 +46,32 @@ export default function OtpScreen({ navigation, route }) {
     try {
       const res = await verifyOtp(phone, finalOtp);
       const userId = res?.data?.user?._id;
+      const userMode = res?.data?.user?.mode;
       if (!userId) {
         alert("Could not fetch user. Please try again.");
         return;
       }
 
-      await setUser({ phone, userId });
+      await setUser({ phone, userId, mode: userMode });
       navigation.reset({
         index: 0,
         routes: [{ name: "ShoppingMode", params: { phone } }],
       });
     } catch (error) {
-      alert("Invalid OTP");
-      console.log(error);
+      const message =
+        error?.response?.data?.message || error?.message || "OTP verification failed";
+      const normalizedMessage = String(message).toLowerCase();
+      if (
+        normalizedMessage.includes("invalid otp") ||
+        normalizedMessage.includes("incorrect otp") ||
+        normalizedMessage.includes("wrong otp") ||
+        normalizedMessage.includes("otp is incorrect")
+      ) {
+        setOtpError("Code is Incorrect");
+        return;
+      }
+      alert(message);
+      console.log("VERIFY OTP ERROR:", error?.response?.data || error?.message || error);
     }
   };
 
@@ -65,6 +81,7 @@ export default function OtpScreen({ navigation, route }) {
       setResending(true);
       await sendOtp(phone);
       setTimer(60);
+      setOtpError("");
     } catch (err) {
       alert("Failed to resend OTP. Please try again.");
     } finally {
@@ -104,15 +121,22 @@ export default function OtpScreen({ navigation, route }) {
           <TextInput
             key={index}
             ref={(r) => (inputRefs.current[index] = r)}
-            style={[styles.input, digit ? styles.inputFilled : null]}
+            style={[
+              styles.input,
+              otpError ? styles.inputError : null,
+              !otpError && digit ? styles.inputFilled : null,
+              { color: "#111" },
+            ]}
             keyboardType="numeric"
             maxLength={1}
             value={digit}
             onChangeText={(v) => handleChange(v, index)}
             onKeyPress={(e) => handleKeyPress(e, index)}
+            selectionColor="#111"
           />
         ))}
       </View>
+      {!!otpError && <Text style={styles.errorText}>{otpError}</Text>}
 
       <TouchableOpacity style={styles.verifyBtn} onPress={handleVerify}>
         <Text style={styles.verifyTxt}>Verify</Text>
@@ -153,7 +177,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     marginTop: 18,
-    marginBottom: 26,
+    marginBottom: 14,
   },
   input: {
     width: 55,
@@ -164,6 +188,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 20,
     backgroundColor: "#ffffff",
+    color: "#111",
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -172,11 +197,22 @@ const styles = StyleSheet.create({
   inputFilled: {
     borderColor: "#000",
   },
+  inputError: {
+    borderColor: "#FF2E2E",
+  },
+  errorText: {
+    color: "#FF2E2E",
+    fontSize: 12,
+    marginBottom: 14,
+    width: 256,
+    alignSelf: "center",
+  },
   verifyBtn: {
     backgroundColor: "#FF3B3B",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
+    marginTop: 4,
   },
   verifyTxt: { fontSize: 18, fontWeight: "700", color: "#fff" },
   resendWrap: { marginTop: 18, alignItems: "center" },
