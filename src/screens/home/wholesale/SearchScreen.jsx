@@ -82,9 +82,17 @@ export default function SearchScreen({ navigation, route }) {
     }
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/public/search`, {
-        params: { q: text, mode },
-      });
+      let res;
+      try {
+        res = await axios.get(`${API_BASE_URL}/api/public/search`, {
+          params: { q: text, mode },
+        });
+      } catch (err) {
+        if (err?.response?.status !== 404) throw err;
+        res = await axios.get(`${API_BASE_URL}/api/public/search/search`, {
+          params: { q: text, mode },
+        });
+      }
       setResults(res.data || []);
     } catch (err) {
       console.log("SEARCH ERROR:", err);

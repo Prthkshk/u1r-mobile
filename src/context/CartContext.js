@@ -5,6 +5,26 @@ export const CartContext = createContext();
 
 const getId = (product) => product?._id || product?.id;
 const getMinQty = (product) => Math.max(Number(product?.moq) || 0, 1);
+const toBoolean = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0" || normalized === "") return false;
+  }
+  return Boolean(value);
+};
+const isMoqStepEnabled = (product) => toBoolean(product?.moqStepEnabled);
+const getQtyStep = (product) => (isMoqStepEnabled(product) ? getMinQty(product) : 1);
+const normalizeQty = (product, quantity) => {
+  const minQty = getMinQty(product);
+  const qty = Math.max(Number(quantity) || 0, minQty);
+  if (!isMoqStepEnabled(product)) return qty;
+  const step = Math.max(minQty, 1);
+  const multiplier = Math.ceil(qty / step);
+  return multiplier * step;
+};
 const normalizeMode = (value = "") => {
   const upper = String(value).toUpperCase();
   if (upper === "B2B" || upper === "WHOLESALE") return "wholesale";
@@ -45,24 +65,24 @@ export function CartProvider({ children }) {
     const modeKey = resolveModeKey(modeOverride, product);
 
     const productMinQty = getMinQty(product);
-    const amount = Math.max(Number(product.qty) || 0, productMinQty);
+    const amount = normalizeQty(product, Number(product.qty) || productMinQty);
 
     updateModeCart(modeKey, (prev) => {
       const existing = prev.find((item) => item.id === id);
 
       if (existing) {
-        return prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                moq: product?.moq ?? item.moq ?? productMinQty,
-                qty: Math.max(
-                  getMinQty({ ...item, moq: product?.moq ?? item.moq }),
-                  item.qty + amount
-                ),
-              }
-            : item
-        );
+        return prev.map((item) => {
+          if (item.id !== id) return item;
+          const mergedItem = {
+            ...item,
+            moq: product?.moq ?? item.moq ?? productMinQty,
+            moqStepEnabled: product?.moqStepEnabled ?? item.moqStepEnabled ?? false,
+          };
+          return {
+            ...mergedItem,
+            qty: normalizeQty(mergedItem, (Number(item.qty) || 0) + amount),
+          };
+        });
       }
 
       return [
@@ -71,7 +91,8 @@ export function CartProvider({ children }) {
           ...product,
           id,
           moq: product?.moq ?? productMinQty,
-          qty: amount,
+          moqStepEnabled: product?.moqStepEnabled ?? false,
+          qty: normalizeQty(product, amount),
           mode: product?.mode ?? modeKey,
         },
       ];
@@ -82,7 +103,12 @@ export function CartProvider({ children }) {
     const modeKey = resolveModeKey(modeOverride);
     updateModeCart(modeKey, (prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, qty: item.qty + 1 } : item
+        item.id === id
+          ? {
+              ...item,
+              qty: normalizeQty(item, (Number(item.qty) || 0) + getQtyStep(item)),
+            }
+          : item
       )
     );
   };
@@ -94,8 +120,9 @@ export function CartProvider({ children }) {
         if (item.id !== id) return item;
 
         const minQty = getMinQty(item);
+        const step = getQtyStep(item);
         const currentQty = Number(item.qty) || 0;
-        const nextQty = currentQty - 1;
+        const nextQty = currentQty - step;
 
         // remove item if user decrements at or below MOQ
         if (currentQty <= minQty) return [];
@@ -118,8 +145,7 @@ export function CartProvider({ children }) {
       if (qty === 0) return prev.filter((item) => item.id !== id);
       const exists = prev.find((item) => item.id === id);
       if (!exists) return prev;
-      const minQty = getMinQty(exists);
-      const finalQty = Math.max(minQty, qty);
+      const finalQty = normalizeQty(exists, qty);
       return prev.map((item) =>
         item.id === id ? { ...item, qty: finalQty } : item
       );

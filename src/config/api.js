@@ -24,6 +24,10 @@ if (/localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(API_BASE_URL)) {
   );
 }
 
+if (__DEV__) {
+  console.log(`[API] Using base URL: ${API_BASE_URL}`);
+}
+
 // Attach base URL for images or other asset paths
 export const withBaseUrl = (uri = "") => {
   if (!uri) return uri;
